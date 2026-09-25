@@ -8,6 +8,11 @@ fs = import('fs')
 cpp = meson.get_compiler('cpp')
 cc = meson.get_compiler('c')
 dxvk_is_msvc = cpp.get_argument_syntax() == 'msvc'
+dxvk_native_ohos = get_option('native_ohos')
+
+if dxvk_native_ohos and platform == 'windows'
+  error('The OHOS Native backend requires a non-Windows target')
+endif
 
 compiler_args = [
   '-msse',
@@ -147,10 +152,12 @@ else
     './include/native/directx'
   ]
 
-  lib_sdl3 = dependency('sdl3', required: get_option('native_sdl3'))
-  lib_sdl2 = dependency('sdl2', required: get_option('native_sdl2'))
-  lib_glfw = dependency('glfw', required: get_option('native_glfw'))
-  if lib_sdl3.found()
+  lib_sdl3 = dependency('sdl3', required: dxvk_native_ohos ? false : get_option('native_sdl3'))
+  lib_sdl2 = dependency('sdl2', required: dxvk_native_ohos ? false : get_option('native_sdl2'))
+  lib_glfw = dependency('glfw', required: dxvk_native_ohos ? false : get_option('native_glfw'))
+  if dxvk_native_ohos
+    compiler_args += ['-DDXVK_WSI_OHOS', '-fms-extensions']
+  elif lib_sdl3.found()
     compiler_args += ['-DDXVK_WSI_SDL3']
   endif
   if lib_sdl2.found()
@@ -159,17 +166,19 @@ else
   if lib_glfw.found()
     compiler_args += ['-DDXVK_WSI_GLFW']
   endif
-  if (not lib_sdl3.found() and not lib_sdl2.found() and not lib_glfw.found())
+  if (not dxvk_native_ohos and not lib_sdl3.found() and not lib_sdl2.found() and not lib_glfw.found())
     error('SDL3, SDL2, or GLFW are required to build dxvk-native')
   endif
   
-  dxvk_name_prefix = 'dxvk_'
-  dxvk_pkg_prefix = 'dxvk-'
+  dxvk_name_prefix = dxvk_native_ohos ? 'dxvk_modern_' : 'dxvk_'
+  dxvk_pkg_prefix = dxvk_native_ohos ? 'dxvk-modern-' : 'dxvk-'
 
-  link_args += [
-    '-static-libgcc',
-    '-static-libstdc++',
-  ]
+  if not dxvk_native_ohos
+    link_args += [
+      '-static-libgcc',
+      '-static-libstdc++',
+    ]
+  endif
 endif
 
 dxvk_include_path = include_directories(dxvk_include_dirs)

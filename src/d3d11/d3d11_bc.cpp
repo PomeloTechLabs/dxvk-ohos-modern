@@ -5,14 +5,12 @@
 
 #include "d3d11_bc.h"
 
-/* Reuse Wine's already-vendored, MIT-licensed BC decoder.  Keeping one
- * implementation avoids a second large decoder copy in the WineHua source
- * payload.  WINE_UNUSED enables the BC6H/BC7 routines which Wine itself does
- * not currently compile. */
+/* Native builds carry the standalone MIT-licensed bcdec source locally.
+ * WINE_UNUSED enables the BC6H/BC7 routines disabled by the Wine copy. */
 #define BCDEC_STATIC
 #define WINE_UNUSED 1
 #define BCDEC_IMPLEMENTATION
-#include "../../../wine/dlls/d3dx9_36/bcdec.h"
+#include "bcdec.h"
 #undef BCDEC_IMPLEMENTATION
 #undef WINE_UNUSED
 #undef BCDEC_STATIC

@@ -114,6 +114,9 @@ namespace dxvk::wsi {
 #if defined(DXVK_WSI_GLFW)
   extern WsiBootstrap GlfwWSI;
 #endif
+#if defined(DXVK_WSI_OHOS)
+  extern WsiBootstrap OhosWSI;
+#endif
 
   void init();
   void quit();

@@ -13,8 +13,17 @@ dxgi_src = [
   'dxgi_swapchain.cpp',
 ]
 
+if dxvk_native_ohos
+  dxgi_src += ['dxgi_ohos_window.cpp']
+endif
+
 dxgi_ld_args      = []
 dxgi_link_depends = []
+dxgi_platform_deps = []
+
+if dxvk_native_ohos
+  dxgi_platform_deps += [cpp.find_library('native_window')]
+endif
 
 if platform != 'windows'
   dxgi_ld_args      += [ '-Wl,--version-script', join_paths(meson.current_source_dir(), 'dxgi.sym') ]
@@ -22,7 +31,7 @@ if platform != 'windows'
 endif
 
 dxgi_dll = shared_library(dxvk_name_prefix+'dxgi', dxgi_src, dxgi_res,
-  dependencies        : [ dxvk_dep ],
+  dependencies        : [ dxvk_dep ] + dxgi_platform_deps,
   include_directories : dxvk_include_path,
   install             : true,
   vs_module_defs      : 'dxgi'+def_spec_ext,

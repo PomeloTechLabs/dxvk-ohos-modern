@@ -1,0 +1,108 @@
+#include <native_window/external_window.h>
+
+#include <new>
+
+#include "../../include/native/ohos/dxvk_native_ohos.h"
+#include "../wsi/ohos_window_registry.h"
+#include "../wsi/ohos_window_bridge.h"
+
+namespace {
+
+  std::mutex nativeObjectMutex;
+
+  int32_t retainNativeWindow(void* window) {
+    std::lock_guard<std::mutex> lock(nativeObjectMutex);
+    return OH_NativeWindow_NativeObjectReference(window);
+  }
+
+  void releaseNativeWindow(void* window) {
+    std::lock_guard<std::mutex> lock(nativeObjectMutex);
+    OH_NativeWindow_NativeObjectUnreference(window);
+  }
+
+  dxvk::ohos::WindowRegistry windows(retainNativeWindow, releaseNativeWindow);
+
+}
+
+namespace dxvk::ohos {
+
+  std::shared_ptr<WindowState> findWindow(WindowHandle handle) {
+    return windows.lookup(handle);
+  }
+
+}
+
+extern "C" {
+
+  int32_t DXVKOhosRegisterWindow(OHNativeWindow* window,
+      uint32_t width, uint32_t height, DXVKOhosWindowHandle* handle) {
+    if (!handle)
+      return DXVK_OHOS_WINDOW_INVALID_ARGUMENT;
+    *handle = 0;
+    if (!window || !width || !height)
+      return DXVK_OHOS_WINDOW_INVALID_ARGUMENT;
+    try {
+      *handle = windows.add(window, width, height);
+      return *handle ? DXVK_OHOS_WINDOW_OK : DXVK_OHOS_WINDOW_UNAVAILABLE;
+    } catch (const std::bad_alloc&) {
+      return DXVK_OHOS_WINDOW_OUT_OF_MEMORY;
+    } catch (...) {
+      return DXVK_OHOS_WINDOW_UNAVAILABLE;
+    }
+  }
+
+  int32_t DXVKOhosResizeWindow(DXVKOhosWindowHandle handle,
+      uint32_t width, uint32_t height) {
+    try {
+      return windows.resize(handle, width, height)
+        ? DXVK_OHOS_WINDOW_OK : DXVK_OHOS_WINDOW_UNAVAILABLE;
+    } catch (...) {
+      return DXVK_OHOS_WINDOW_UNAVAILABLE;
+    }
+  }
+
+  int32_t DXVKOhosUnregisterWindow(DXVKOhosWindowHandle handle) {
+    try {
+      return windows.remove(handle)
+        ? DXVK_OHOS_WINDOW_OK : DXVK_OHOS_WINDOW_UNAVAILABLE;
+    } catch (...) {
+      return DXVK_OHOS_WINDOW_UNAVAILABLE;
+    }
+  }
+
+  int32_t DXVKOhosGetWindowInfo(DXVKOhosWindowHandle handle,
+      DXVKOhosWindowInfo* info) {
+    if (!info)
+      return DXVK_OHOS_WINDOW_INVALID_ARGUMENT;
+    *info = {};
+    try {
+      dxvk::ohos::WindowLease lease(windows.lookup(handle));
+      if (!lease.active())
+        return DXVK_OHOS_WINDOW_UNAVAILABLE;
+      *info = { lease.width(), lease.height(), lease.revision() };
+      return DXVK_OHOS_WINDOW_OK;
+    } catch (...) {
+      return DXVK_OHOS_WINDOW_UNAVAILABLE;
+    }
+  }
+
+  VkResult DXVKOhosCreateSurface(DXVKOhosWindowHandle handle,
+      PFN_vkGetInstanceProcAddr getProc, VkInstance instance,
+      VkSurfaceKHR* surface) {
+    if (!surface || !getProc)
+      return VK_ERROR_INITIALIZATION_FAILED;
+    *surface = VK_NULL_HANDLE;
+    dxvk::ohos::WindowLease lease(windows.lookup(handle));
+    if (!lease.drawable())
+      return VK_ERROR_SURFACE_LOST_KHR;
+    auto create = reinterpret_cast<PFN_vkCreateSurfaceOHOS>(
+      getProc(instance, "vkCreateSurfaceOHOS"));
+    if (!create)
+      return VK_ERROR_EXTENSION_NOT_PRESENT;
+    VkSurfaceCreateInfoOHOS info = {};
+    info.sType = static_cast<VkStructureType>(1000685000);
+    info.window = static_cast<OHNativeWindow*>(lease.nativeWindow());
+    return create(instance, &info, nullptr, surface);
+  }
+
+}

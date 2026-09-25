@@ -15,17 +15,23 @@ wsi_src = [
   'glfw/wsi_window_glfw.cpp',
 ]
 
+if dxvk_native_ohos
+  wsi_src += ['ohos/wsi_platform_ohos.cpp']
+endif
+
 wsi_deps = [ dep_displayinfo ]
 
 if platform == 'windows'
   lib_setupapi = cpp.find_library('setupapi')
   wsi_deps += [ lib_setupapi ]
 else
-  wsi_deps += [
-    lib_sdl3.partial_dependency(compile_args: true, includes: true),
-    lib_sdl2.partial_dependency(compile_args: true, includes: true),
-    lib_glfw.partial_dependency(compile_args: true, includes: true),
-  ]
+  if not dxvk_native_ohos
+    wsi_deps += [
+      lib_sdl3.partial_dependency(compile_args: true, includes: true),
+      lib_sdl2.partial_dependency(compile_args: true, includes: true),
+      lib_glfw.partial_dependency(compile_args: true, includes: true),
+    ]
+  endif
 endif
 
 wsi_lib = static_library('wsi', wsi_src,

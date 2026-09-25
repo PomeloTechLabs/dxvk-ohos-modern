@@ -5,6 +5,11 @@
     CreateDXGIFactory;
     DXGIDeclareAdapterRemovalSupport;
     DXGIGetDebugInterface1;
+    DXVKOhosRegisterWindow;
+    DXVKOhosResizeWindow;
+    DXVKOhosUnregisterWindow;
+    DXVKOhosGetWindowInfo;
+    DXVKOhosCreateSurface;
 
   local:
     *;
