@@ -6,6 +6,39 @@
 
 #include "../util/util_win32_compat.h"
 
+#if defined(DXVK_WSI_OHOS)
+#include "../../include/native/ohos/dxvk_native_ohos.h"
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+
+namespace {
+  struct OhosPerformanceCounters {
+    std::atomic<uint64_t> sequence { 0 };
+    std::atomic<uint32_t> fpsMilli { 0 };
+    std::atomic<uint32_t> averageFrameUs { 0 };
+    std::atomic<uint32_t> p95FrameUs { 0 };
+    std::atomic<uint32_t> gpuLoadPermille { 0 };
+  } gOhosPerformance;
+}
+
+extern "C" DXVK_OHOS_API int32_t DXVKOhosGetPerformanceStats(
+    DXVKOhosPerformanceStats* stats) {
+  if (!stats || stats->size != sizeof(*stats))
+    return DXVK_OHOS_WINDOW_INVALID_ARGUMENT;
+  DXVKOhosPerformanceStats current = {};
+  current.size = sizeof(current);
+  current.version = 2;
+  current.fpsMilli = gOhosPerformance.fpsMilli.load(std::memory_order_relaxed);
+  current.averageFrameUs = gOhosPerformance.averageFrameUs.load(std::memory_order_relaxed);
+  current.p95FrameUs = gOhosPerformance.p95FrameUs.load(std::memory_order_relaxed);
+  current.gpuLoadPermille = gOhosPerformance.gpuLoadPermille.load(std::memory_order_relaxed);
+  current.sequence = gOhosPerformance.sequence.load(std::memory_order_acquire);
+  *stats = current;
+  return DXVK_OHOS_WINDOW_OK;
+}
+#endif
+
 namespace dxvk {
 
   static uint16_t MapGammaControlPoint(float x) {
@@ -294,8 +327,63 @@ namespace dxvk {
     if (m_latencyHud)
       m_latencyHud->accumulateStats(latencyStats);
 
+#if defined(DXVK_WSI_OHOS)
+    if (hr == S_OK)
+      UpdateOhosPerformanceStats();
+#endif
+
     return hr;
   }
+
+#if defined(DXVK_WSI_OHOS)
+  void D3D11SwapChain::UpdateOhosPerformanceStats() {
+    const uint64_t nowUs = uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(
+      std::chrono::steady_clock::now().time_since_epoch()).count());
+    if (!m_ohosStatsStartUs) {
+      m_ohosStatsStartUs = nowUs;
+      m_ohosStatsPreviousUs = nowUs;
+      m_ohosStatsGpuIdleUs = m_device->getStatCounters()
+        .getCtr(DxvkStatCounter::GpuIdleTicks);
+      return;
+    }
+
+    const uint64_t intervalUs = nowUs - m_ohosStatsPreviousUs;
+    m_ohosStatsPreviousUs = nowUs;
+    if (intervalUs && intervalUs <= UINT32_MAX) {
+      m_ohosStatsIntervals[m_ohosStatsFrames % m_ohosStatsIntervals.size()]
+        = uint32_t(intervalUs);
+      m_ohosStatsIntervalCount = std::min<uint32_t>(m_ohosStatsIntervalCount + 1,
+        m_ohosStatsIntervals.size());
+    }
+    ++m_ohosStatsFrames;
+    const uint64_t elapsedUs = nowUs - m_ohosStatsStartUs;
+    if (elapsedUs < 1000000 || !m_ohosStatsFrames)
+      return;
+
+    auto intervals = m_ohosStatsIntervals;
+    std::sort(intervals.begin(), intervals.begin() + m_ohosStatsIntervalCount);
+    const uint32_t p95Us = m_ohosStatsIntervalCount
+      ? intervals[((m_ohosStatsIntervalCount - 1) * 95) / 100]
+      : uint32_t(elapsedUs / m_ohosStatsFrames);
+    const uint64_t gpuIdleUs = m_device->getStatCounters()
+      .getCtr(DxvkStatCounter::GpuIdleTicks);
+    const uint64_t idleDeltaUs = gpuIdleUs >= m_ohosStatsGpuIdleUs
+      ? gpuIdleUs - m_ohosStatsGpuIdleUs : 0;
+    const uint64_t busyUs = elapsedUs > idleDeltaUs ? elapsedUs - idleDeltaUs : 0;
+    gOhosPerformance.fpsMilli.store(uint32_t(
+      m_ohosStatsFrames * 1000000000ull / elapsedUs), std::memory_order_relaxed);
+    gOhosPerformance.averageFrameUs.store(uint32_t(
+      elapsedUs / m_ohosStatsFrames), std::memory_order_relaxed);
+    gOhosPerformance.p95FrameUs.store(p95Us, std::memory_order_relaxed);
+    gOhosPerformance.gpuLoadPermille.store(uint32_t(std::min<uint64_t>(1000,
+      busyUs * 1000 / elapsedUs)), std::memory_order_relaxed);
+    gOhosPerformance.sequence.fetch_add(1, std::memory_order_release);
+    m_ohosStatsStartUs = nowUs;
+    m_ohosStatsFrames = 0;
+    m_ohosStatsIntervalCount = 0;
+    m_ohosStatsGpuIdleUs = gpuIdleUs;
+  }
+#endif
 
 
   UINT STDMETHODCALLTYPE D3D11SwapChain::CheckColorSpaceSupport(

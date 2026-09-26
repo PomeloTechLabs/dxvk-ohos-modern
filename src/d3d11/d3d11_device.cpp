@@ -1982,6 +1982,13 @@ namespace dxvk {
     DxvkDeviceFeatures supported = Adapter->features();
     DxvkDeviceFeatures enabled   = {};
     const bool venusCompatibility = Adapter->isWineHuaVenus();
+#if defined(DXVK_WSI_OHOS)
+    // Native OHOS exposes the real mobile driver features rather than a
+    // desktop Vulkan feature set. Do not request unavailable optional features.
+    const bool mobileCapabilityPolicy = true;
+#else
+    const bool mobileCapabilityPolicy = venusCompatibility;
+#endif
 
     /* Venus faithfully reports the Host feature set. On Mobile Vulkan that
      * may omit desktop-only D3D11 conveniences, which must not be requested
@@ -1989,11 +1996,14 @@ namespace dxvk {
      * fallback or validation paths; this only makes device creation honest. */
     if (venusCompatibility)
       Logger::info("WineHua: applying Venus capability policy");
+#if defined(DXVK_WSI_OHOS)
+    Logger::info("OHOS Native: applying mobile capability policy");
+#endif
 
     // Required for feature level 10_1
     enabled.core.features.depthBiasClamp                          = VK_TRUE;
     enabled.core.features.depthClamp                              = VK_TRUE;
-    enabled.core.features.dualSrcBlend                            = venusCompatibility
+    enabled.core.features.dualSrcBlend                            = mobileCapabilityPolicy
                                                                   ? supported.core.features.dualSrcBlend
                                                                   : VK_TRUE;
     enabled.core.features.fillModeNonSolid                        = VK_TRUE;
@@ -2001,7 +2011,7 @@ namespace dxvk {
     enabled.core.features.geometryShader                          = VK_TRUE;
     enabled.core.features.imageCubeArray                          = VK_TRUE;
     enabled.core.features.independentBlend                        = VK_TRUE;
-    enabled.core.features.multiViewport                           = venusCompatibility
+    enabled.core.features.multiViewport                           = mobileCapabilityPolicy
                                                                   ? supported.core.features.multiViewport
                                                                   : VK_TRUE;
     enabled.core.features.occlusionQueryPrecise                   = VK_TRUE;
@@ -2011,7 +2021,7 @@ namespace dxvk {
     enabled.core.features.shaderClipDistance                      = VK_TRUE;
     enabled.core.features.shaderCullDistance                      = VK_TRUE;
     enabled.core.features.shaderImageGatherExtended               = VK_TRUE;
-    enabled.core.features.textureCompressionBC                    = venusCompatibility
+    enabled.core.features.textureCompressionBC                    = mobileCapabilityPolicy
                                                                   ? supported.core.features.textureCompressionBC
                                                                   : VK_TRUE;
 
@@ -2022,10 +2032,10 @@ namespace dxvk {
     enabled.extCustomBorderColor.customBorderColors               = supported.extCustomBorderColor.customBorderColorWithoutFormat;
     enabled.extCustomBorderColor.customBorderColorWithoutFormat   = supported.extCustomBorderColor.customBorderColorWithoutFormat;
 
-    enabled.extTransformFeedback.transformFeedback                = venusCompatibility
+    enabled.extTransformFeedback.transformFeedback                = mobileCapabilityPolicy
                                                                   ? supported.extTransformFeedback.transformFeedback
                                                                   : VK_TRUE;
-    enabled.extTransformFeedback.geometryStreams                  = venusCompatibility
+    enabled.extTransformFeedback.geometryStreams                  = mobileCapabilityPolicy
                                                                   ? supported.extTransformFeedback.geometryStreams
                                                                   : VK_TRUE;
 

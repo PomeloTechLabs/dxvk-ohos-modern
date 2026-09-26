@@ -9,6 +9,10 @@
 
 #include "../util/sync/sync_signal.h"
 
+#if defined(DXVK_WSI_OHOS)
+#include <array>
+#endif
+
 namespace dxvk {
   
   class D3D11Device;
@@ -126,6 +130,16 @@ namespace dxvk {
     DXGI_VK_FRAME_STATISTICS  m_frameStatistics = { };
 
     Rc<hud::HudLatencyItem>   m_latencyHud;
+
+#if defined(DXVK_WSI_OHOS)
+    uint64_t                  m_ohosStatsStartUs = 0;
+    uint64_t                  m_ohosStatsPreviousUs = 0;
+    uint64_t                  m_ohosStatsGpuIdleUs = 0;
+    uint32_t                  m_ohosStatsFrames = 0;
+    uint32_t                  m_ohosStatsIntervalCount = 0;
+    std::array<uint32_t, 128> m_ohosStatsIntervals = {};
+    void UpdateOhosPerformanceStats();
+#endif
 
     Rc<DxvkImageView> GetBackBufferView();
 

@@ -859,11 +859,15 @@ namespace dxvk {
       RemapDepthFormat(DXGI_FORMAT_D24_UNORM_S8_UINT,     VK_FORMAT_D32_SFLOAT_S8_UINT);
     }
 
-    /* Mobile Venus drivers expose the Host format table truthfully. When BC
-     * is absent, WineHua decodes immutable/default sampled resources during
-     * upload and stores the pixels in this uncompressed backing format. */
-    if (device->adapter()->isWineHuaVenus()
-     && !device->features().core.features.textureCompressionBC) {
+    /* WineHua and OHOS Native both expose the mobile driver's actual BC
+     * capability. Reuse the existing upload-time decode only when BC is
+     * unavailable; native BC remains untouched where supported. */
+#if defined(DXVK_WSI_OHOS)
+    const bool mobileBcFallback = true;
+#else
+    const bool mobileBcFallback = device->adapter()->isWineHuaVenus();
+#endif
+    if (mobileBcFallback && !device->features().core.features.textureCompressionBC) {
       const VkComponentMapping identity = {
         VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
         VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY };
@@ -933,7 +937,7 @@ namespace dxvk {
              DXGI_FORMAT_BC3_UNORM_SRGB, DXGI_FORMAT_BC7_UNORM_SRGB })
         m_dxgiFamilies[uint32_t(format)] = rgba8SrgbFamily;
 
-      Logger::info("WineHua: BC1-BC7 upload-time decompression enabled");
+      Logger::info("Mobile Vulkan: BC1-BC7 upload-time decompression enabled");
     }
 
     if (!CheckImageFormatSupport(device, VK_FORMAT_A8_UNORM_KHR,
