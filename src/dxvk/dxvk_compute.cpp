@@ -3,6 +3,9 @@
 #include <sstream>
 
 #include "../util/util_time.h"
+#if defined(DXVK_WSI_OHOS)
+#include "../util/util_ohos_perf.h"
+#endif
 
 #include "dxvk_compute.h"
 #include "dxvk_device.h"
@@ -116,8 +119,16 @@ namespace dxvk {
     info.basePipelineIndex    = -1;
 
     VkPipeline pipeline = VK_NULL_HANDLE;
+#if defined(DXVK_WSI_OHOS)
+    const uint64_t perfPipelineStart = ohosperf::enabled() ? ohosperf::nowNs() : 0;
+#endif
     VkResult vr = vk->vkCreateComputePipelines(vk->device(),
           VK_NULL_HANDLE, 1, &info, nullptr, &pipeline);
+#if defined(DXVK_WSI_OHOS)
+    if (perfPipelineStart)
+      ohosperf::record(DXVK_OHOS_PERF_PIPELINE_CREATE, 0,
+        ohosperf::elapsedUs(perfPipelineStart), 1, uint32_t(vr));
+#endif
 
     if (vr != VK_SUCCESS) {
       Logger::err(str::format("DxvkComputePipeline: Failed to compile pipeline: ", vr));

@@ -1,5 +1,8 @@
 #include "dxvk_device.h"
 #include "dxvk_queue.h"
+#if defined(DXVK_WSI_OHOS)
+#include "../util/util_ohos_perf.h"
+#endif
 
 namespace dxvk {
   
@@ -46,11 +49,20 @@ namespace dxvk {
           DxvkSubmitInfo            submitInfo,
           DxvkLatencyInfo           latencyInfo,
           DxvkSubmitStatus*         status) {
+#if defined(DXVK_WSI_OHOS)
+    const uint64_t perfWaitStart = ohosperf::enabled() ? ohosperf::nowNs() : 0;
+#endif
     std::unique_lock<dxvk::mutex> lock(m_mutex);
 
     m_finishCond.wait(lock, [this] {
       return m_submitQueue.size() + m_finishQueue.size() <= MaxNumQueuedCommandBuffers;
     });
+#if defined(DXVK_WSI_OHOS)
+    if (perfWaitStart)
+      ohosperf::record(DXVK_OHOS_PERF_QUEUE_ENQUEUE, latencyInfo.frameId,
+        ohosperf::elapsedUs(perfWaitStart),
+        m_submitQueue.size() + m_finishQueue.size());
+#endif
 
     DxvkSubmitEntry entry = { };
     entry.status = status;
@@ -80,20 +92,42 @@ namespace dxvk {
 
   void DxvkSubmissionQueue::synchronizeSubmission(
           DxvkSubmitStatus*   status) {
+#if defined(DXVK_WSI_OHOS)
+    const uint64_t perfWaitStart = ohosperf::enabled() ? ohosperf::nowNs() : 0;
+#endif
     std::unique_lock<dxvk::mutex> lock(m_mutex);
 
     m_submitCond.wait(lock, [status] {
       return status->result.load() != VK_NOT_READY;
     });
+#if defined(DXVK_WSI_OHOS)
+    if (perfWaitStart) {
+      const uint32_t durationUs = ohosperf::elapsedUs(perfWaitStart);
+      if (durationUs >= 100)
+        ohosperf::record(DXVK_OHOS_PERF_SYNC_WAIT, 0,
+          durationUs, 1, uint32_t(status->result.load()));
+    }
+#endif
   }
 
 
   void DxvkSubmissionQueue::synchronize() {
+#if defined(DXVK_WSI_OHOS)
+    const uint64_t perfWaitStart = ohosperf::enabled() ? ohosperf::nowNs() : 0;
+#endif
     std::unique_lock<dxvk::mutex> lock(m_mutex);
 
     m_submitCond.wait(lock, [this] {
       return m_submitQueue.empty();
     });
+#if defined(DXVK_WSI_OHOS)
+    if (perfWaitStart) {
+      const uint32_t durationUs = ohosperf::elapsedUs(perfWaitStart);
+      if (durationUs >= 100)
+        ohosperf::record(DXVK_OHOS_PERF_SYNC_WAIT, 0,
+          durationUs, 2);
+    }
+#endif
   }
 
 
@@ -149,7 +183,16 @@ namespace dxvk {
 
       // Submit command buffer to device
       if (m_lastError != VK_ERROR_DEVICE_LOST) {
+#if defined(DXVK_WSI_OHOS)
+        const uint64_t perfQueueLockStart = ohosperf::enabled() ? ohosperf::nowNs() : 0;
+#endif
         std::lock_guard<dxvk::mutex> lock(m_mutexQueue);
+#if defined(DXVK_WSI_OHOS)
+        const uint32_t perfQueueLockUs = perfQueueLockStart
+          ? ohosperf::elapsedUs(perfQueueLockStart) : 0;
+        const uint64_t perfSubmitStart = perfQueueLockStart
+          ? ohosperf::nowNs() : 0;
+#endif
 
         if (m_callback)
           m_callback(true);
@@ -183,6 +226,13 @@ namespace dxvk {
 
         if (m_callback)
           m_callback(false);
+#if defined(DXVK_WSI_OHOS)
+        if (perfSubmitStart)
+          ohosperf::record(DXVK_OHOS_PERF_COMMAND_SUBMIT,
+            entry.latency.frameId, ohosperf::elapsedUs(perfSubmitStart),
+            perfQueueLockUs, entry.submit.cmdList ? 1 : 2,
+            uint32_t(entry.result), 0);
+#endif
       } else {
         // Don't submit anything after device loss
         // so that drivers get a chance to recover

@@ -1,6 +1,9 @@
 #include <iomanip>
 
 #include "../util/util_time.h"
+#if defined(DXVK_WSI_OHOS)
+#include "../util/util_ohos_perf.h"
+#endif
 
 #include "dxvk_device.h"
 #include "dxvk_graphics.h"
@@ -244,8 +247,16 @@ namespace dxvk {
     info.pDynamicState        = &dyInfo;
     info.basePipelineIndex    = -1;
 
+#if defined(DXVK_WSI_OHOS)
+    const uint64_t perfPipelineStart = ohosperf::enabled() ? ohosperf::nowNs() : 0;
+#endif
     VkResult vr = vk->vkCreateGraphicsPipelines(vk->device(),
       VK_NULL_HANDLE, 1, &info, nullptr, &m_pipeline);
+#if defined(DXVK_WSI_OHOS)
+    if (perfPipelineStart)
+      ohosperf::record(DXVK_OHOS_PERF_PIPELINE_CREATE, 0,
+        ohosperf::elapsedUs(perfPipelineStart), 0, uint32_t(vr));
+#endif
 
     if (vr)
       throw DxvkError("Failed to create vertex input pipeline library");
@@ -518,8 +529,16 @@ namespace dxvk {
     info.pDynamicState        = &dyInfo;
     info.basePipelineIndex    = -1;
 
+#if defined(DXVK_WSI_OHOS)
+    const uint64_t perfPipelineStart = ohosperf::enabled() ? ohosperf::nowNs() : 0;
+#endif
     VkResult vr = vk->vkCreateGraphicsPipelines(vk->device(),
       VK_NULL_HANDLE, 1, &info, nullptr, &m_pipeline);
+#if defined(DXVK_WSI_OHOS)
+    if (perfPipelineStart)
+      ohosperf::record(DXVK_OHOS_PERF_PIPELINE_CREATE, 0,
+        ohosperf::elapsedUs(perfPipelineStart), 0, uint32_t(vr));
+#endif
 
     if (vr)
       throw DxvkError("Failed to create vertex input pipeline library");
@@ -1363,7 +1382,15 @@ namespace dxvk {
     info.basePipelineIndex  = -1;
 
     VkPipeline pipeline = VK_NULL_HANDLE;
+#if defined(DXVK_WSI_OHOS)
+    const uint64_t perfPipelineStart = ohosperf::enabled() ? ohosperf::nowNs() : 0;
+#endif
     VkResult vr = vk->vkCreateGraphicsPipelines(vk->device(), VK_NULL_HANDLE, 1, &info, nullptr, &pipeline);
+#if defined(DXVK_WSI_OHOS)
+    if (perfPipelineStart)
+      ohosperf::record(DXVK_OHOS_PERF_PIPELINE_CREATE, 0,
+        ohosperf::elapsedUs(perfPipelineStart), 0, uint32_t(vr));
+#endif
 
     if (vr && vr != VK_PIPELINE_COMPILE_REQUIRED_EXT)
       Logger::err(str::format("DxvkGraphicsPipeline: Failed to create base pipeline: ", vr));
@@ -1437,7 +1464,15 @@ namespace dxvk {
       info.flags |= VK_PIPELINE_CREATE_DEPTH_STENCIL_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
 
     VkPipeline pipeline = VK_NULL_HANDLE;
+#if defined(DXVK_WSI_OHOS)
+    const uint64_t perfPipelineStart = ohosperf::enabled() ? ohosperf::nowNs() : 0;
+#endif
     VkResult vr = vk->vkCreateGraphicsPipelines(vk->device(), VK_NULL_HANDLE, 1, &info, nullptr, &pipeline);
+#if defined(DXVK_WSI_OHOS)
+    if (perfPipelineStart)
+      ohosperf::record(DXVK_OHOS_PERF_PIPELINE_CREATE, 0,
+        ohosperf::elapsedUs(perfPipelineStart), 0, uint32_t(vr));
+#endif
 
     if (vr != VK_SUCCESS) {
       Logger::err(str::format("DxvkGraphicsPipeline: Failed to compile pipeline: ", vr));

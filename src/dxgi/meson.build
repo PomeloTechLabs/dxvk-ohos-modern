@@ -14,7 +14,7 @@ dxgi_src = [
 ]
 
 if dxvk_native_ohos
-  dxgi_src += ['dxgi_ohos_window.cpp']
+  dxgi_src += ['dxgi_ohos_window.cpp', 'dxgi_ohos_perf.cpp']
 endif
 
 dxgi_ld_args      = []

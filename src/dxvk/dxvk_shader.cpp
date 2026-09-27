@@ -1,6 +1,9 @@
 #include "dxvk_device.h"
 #include "dxvk_pipemanager.h"
 #include "dxvk_shader.h"
+#if defined(DXVK_WSI_OHOS)
+#include "../util/util_ohos_perf.h"
+#endif
 
 #include <dxvk_dummy_frag.h>
 
@@ -1582,7 +1585,15 @@ namespace dxvk {
     info.basePipelineIndex    = -1;
 
     VkPipeline pipeline = VK_NULL_HANDLE;
+#if defined(DXVK_WSI_OHOS)
+    const uint64_t perfPipelineStart = ohosperf::enabled() ? ohosperf::nowNs() : 0;
+#endif
     VkResult vr = vk->vkCreateGraphicsPipelines(vk->device(), VK_NULL_HANDLE, 1, &info, nullptr, &pipeline);
+#if defined(DXVK_WSI_OHOS)
+    if (perfPipelineStart)
+      ohosperf::record(DXVK_OHOS_PERF_PIPELINE_CREATE, 0,
+        ohosperf::elapsedUs(perfPipelineStart), 0, uint32_t(vr));
+#endif
 
     if (vr && vr != VK_PIPELINE_COMPILE_REQUIRED_EXT)
       Logger::err(str::format("DxvkShaderPipelineLibrary: Failed to create vertex shader pipeline: ", vr));
@@ -1671,7 +1682,15 @@ namespace dxvk {
       info.pMultisampleState  = &msInfo;
 
     VkPipeline pipeline = VK_NULL_HANDLE;
+#if defined(DXVK_WSI_OHOS)
+    const uint64_t perfPipelineStart = ohosperf::enabled() ? ohosperf::nowNs() : 0;
+#endif
     VkResult vr = vk->vkCreateGraphicsPipelines(vk->device(), VK_NULL_HANDLE, 1, &info, nullptr, &pipeline);
+#if defined(DXVK_WSI_OHOS)
+    if (perfPipelineStart)
+      ohosperf::record(DXVK_OHOS_PERF_PIPELINE_CREATE, 0,
+        ohosperf::elapsedUs(perfPipelineStart), 0, uint32_t(vr));
+#endif
 
     if (vr && !(flags & VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT))
       Logger::err(str::format("DxvkShaderPipelineLibrary: Failed to create fragment shader pipeline: ", vr));
@@ -1693,7 +1712,15 @@ namespace dxvk {
     info.basePipelineIndex = -1;
 
     VkPipeline pipeline = VK_NULL_HANDLE;
+#if defined(DXVK_WSI_OHOS)
+    const uint64_t perfPipelineStart = ohosperf::enabled() ? ohosperf::nowNs() : 0;
+#endif
     VkResult vr = vk->vkCreateComputePipelines(vk->device(), VK_NULL_HANDLE, 1, &info, nullptr, &pipeline);
+#if defined(DXVK_WSI_OHOS)
+    if (perfPipelineStart)
+      ohosperf::record(DXVK_OHOS_PERF_PIPELINE_CREATE, 0,
+        ohosperf::elapsedUs(perfPipelineStart), 1, uint32_t(vr));
+#endif
 
     if (vr && vr != VK_PIPELINE_COMPILE_REQUIRED_EXT)
       Logger::err(str::format("DxvkShaderPipelineLibrary: Failed to create compute shader pipeline: ", vr));

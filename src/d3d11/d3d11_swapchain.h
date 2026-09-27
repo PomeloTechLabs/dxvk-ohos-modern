@@ -138,7 +138,7 @@ namespace dxvk {
     uint32_t                  m_ohosStatsFrames = 0;
     uint32_t                  m_ohosStatsIntervalCount = 0;
     std::array<uint32_t, 128> m_ohosStatsIntervals = {};
-    void UpdateOhosPerformanceStats();
+    void UpdateOhosPerformanceStats(uint32_t presentCallUs);
 #endif
 
     Rc<DxvkImageView> GetBackBufferView();

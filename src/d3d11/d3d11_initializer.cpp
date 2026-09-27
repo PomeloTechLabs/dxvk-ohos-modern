@@ -6,6 +6,9 @@
 #include "d3d11_initializer.h"
 
 #include "../util/util_winehua_api_trace.h"
+#if defined(DXVK_WSI_OHOS)
+#include "../util/util_ohos_perf.h"
+#endif
 
 namespace dxvk {
 
@@ -226,7 +229,27 @@ namespace dxvk {
   void D3D11Initializer::InitDeviceLocalTexture(
           D3D11CommonTexture*         pTexture,
     const D3D11_SUBRESOURCE_DATA*     pInitialData) {
+#if defined(DXVK_WSI_OHOS)
+    const uint64_t perfStartNs = ohosperf::enabled() ? ohosperf::nowNs() : 0;
+#endif
     std::lock_guard<dxvk::mutex> lock(m_mutex);
+#if defined(DXVK_WSI_OHOS)
+    struct TexturePerfSample {
+      uint64_t startNs;
+      uint64_t waitUs;
+      uint64_t decodeUs = 0;
+      uint64_t allocUs = 0;
+      uint64_t copyUs = 0;
+      uint64_t bytes = 0;
+      uint64_t formatPair = 0;
+      ~TexturePerfSample() {
+        if (startNs)
+          ohosperf::record(DXVK_OHOS_PERF_TEXTURE_INIT, 0,
+            ohosperf::elapsedUs(startNs), waitUs, decodeUs, allocUs,
+            copyUs, bytes, formatPair);
+      }
+    } perf = { perfStartNs, perfStartNs ? ohosperf::elapsedUs(perfStartNs) : 0 };
+#endif
     
     // Image migt be null if this is a staging resource
     Rc<DxvkImage> image = pTexture->GetImage();
@@ -239,6 +262,10 @@ namespace dxvk {
                          && !image->formatInfo()->flags.test(DxvkFormatFlag::BlockCompressed);
     const VkFormat uploadFormat = bcEmulated ? image->info().format : packedFormat;
     const auto uploadFormatInfo = lookupFormatInfo(uploadFormat);
+#if defined(DXVK_WSI_OHOS)
+    perf.formatPair = (uint64_t(uint32_t(packedFormat)) << 32) |
+      uint32_t(uploadFormat);
+#endif
 
     if (pInitialData != nullptr && pInitialData->pSysMem != nullptr) {
       // Compute data size for all subresources and allocate staging buffer memory
@@ -252,7 +279,15 @@ namespace dxvk {
             uploadFormat, image->mipLevelExtent(mip), uploadFormatInfo->aspectMask), CACHE_LINE_SIZE);
         }
 
+#if defined(DXVK_WSI_OHOS)
+        perf.bytes = dataSize;
+        const uint64_t allocStartNs = perfStartNs ? ohosperf::nowNs() : 0;
+#endif
         stagingSlice = m_stagingBuffer.alloc(dataSize);
+#if defined(DXVK_WSI_OHOS)
+        if (allocStartNs)
+          perf.allocUs += ohosperf::elapsedUs(allocStartNs);
+#endif
       }
 
       // Copy initial data for each subresource into the staging buffer,
@@ -272,17 +307,36 @@ namespace dxvk {
 
             if (bcEmulated) {
               D3D11CpuImage converted;
+#if defined(DXVK_WSI_OHOS)
+              const uint64_t decodeStartNs = perfStartNs ? ohosperf::nowNs() : 0;
+#endif
               if (!DecodeD3D11BcImage(packedFormat, mipLevelExtent,
                     pInitialData[index].pSysMem, pInitialData[index].SysMemPitch,
                     pInitialData[index].SysMemSlicePitch, converted)
                || converted.data.size() != mipSizePerLayer)
                 throw DxvkError("WineHua: Failed to decompress initial BC texture data");
+#if defined(DXVK_WSI_OHOS)
+              if (decodeStartNs)
+                perf.decodeUs += ohosperf::elapsedUs(decodeStartNs);
+              const uint64_t copyStartNs = perfStartNs ? ohosperf::nowNs() : 0;
+#endif
               std::memcpy(stagingSlice.mapPtr(dataOffset),
                 converted.data.data(), converted.data.size());
+#if defined(DXVK_WSI_OHOS)
+              if (copyStartNs)
+                perf.copyUs += ohosperf::elapsedUs(copyStartNs);
+#endif
             } else {
+#if defined(DXVK_WSI_OHOS)
+              const uint64_t copyStartNs = perfStartNs ? ohosperf::nowNs() : 0;
+#endif
               util::packImageData(stagingSlice.mapPtr(dataOffset),
                 pInitialData[index].pSysMem, pInitialData[index].SysMemPitch, pInitialData[index].SysMemSlicePitch,
                 0, 0, pTexture->GetVkImageType(), mipLevelExtent, 1, formatInfo, formatInfo->aspectMask);
+#if defined(DXVK_WSI_OHOS)
+              if (copyStartNs)
+                perf.copyUs += ohosperf::elapsedUs(copyStartNs);
+#endif
             }
 
             dataOffset += align(mipSizePerLayer, CACHE_LINE_SIZE);

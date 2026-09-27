@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include "../util/util_ohos_perf.h"
 
 namespace {
   struct OhosPerformanceCounters {
@@ -28,7 +29,9 @@ extern "C" DXVK_OHOS_API int32_t DXVKOhosGetPerformanceStats(
     return DXVK_OHOS_WINDOW_INVALID_ARGUMENT;
   DXVKOhosPerformanceStats current = {};
   current.size = sizeof(current);
-  current.version = 2;
+  // Version 3 only publishes the common FPS, frame-interval and queue-idle
+  // estimate fields. Legacy version 2 also publishes the detailed counters.
+  current.version = 3;
   current.fpsMilli = gOhosPerformance.fpsMilli.load(std::memory_order_relaxed);
   current.averageFrameUs = gOhosPerformance.averageFrameUs.load(std::memory_order_relaxed);
   current.p95FrameUs = gOhosPerformance.p95FrameUs.load(std::memory_order_relaxed);
@@ -37,6 +40,7 @@ extern "C" DXVK_OHOS_API int32_t DXVKOhosGetPerformanceStats(
   *stats = current;
   return DXVK_OHOS_WINDOW_OK;
 }
+
 #endif
 
 namespace dxvk {
@@ -285,6 +289,9 @@ namespace dxvk {
           UINT                      SyncInterval,
           UINT                      PresentFlags,
     const DXGI_PRESENT_PARAMETERS*  pPresentParameters) {
+#if defined(DXVK_WSI_OHOS)
+    const uint64_t traceStartNs = ohosperf::enabled() ? ohosperf::nowNs() : 0;
+#endif
     HRESULT hr = S_OK;
 
     if (m_device->getDeviceStatus() != VK_SUCCESS)
@@ -329,14 +336,15 @@ namespace dxvk {
 
 #if defined(DXVK_WSI_OHOS)
     if (hr == S_OK)
-      UpdateOhosPerformanceStats();
+      UpdateOhosPerformanceStats(traceStartNs
+        ? ohosperf::elapsedUs(traceStartNs) : 0);
 #endif
 
     return hr;
   }
 
 #if defined(DXVK_WSI_OHOS)
-  void D3D11SwapChain::UpdateOhosPerformanceStats() {
+  void D3D11SwapChain::UpdateOhosPerformanceStats(uint32_t presentCallUs) {
     const uint64_t nowUs = uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(
       std::chrono::steady_clock::now().time_since_epoch()).count());
     if (!m_ohosStatsStartUs) {
@@ -349,6 +357,13 @@ namespace dxvk {
 
     const uint64_t intervalUs = nowUs - m_ohosStatsPreviousUs;
     m_ohosStatsPreviousUs = nowUs;
+    if (ohosperf::enabled()) {
+      ohosperf::record(DXVK_OHOS_PERF_PRESENT, m_frameId,
+        uint32_t(std::min<uint64_t>(intervalUs, UINT32_MAX)),
+        presentCallUs, uint64_t(m_device->getStatCounters()
+          .getCtr(DxvkStatCounter::GpuIdleTicks)),
+        0, 0);
+    }
     if (intervalUs && intervalUs <= UINT32_MAX) {
       m_ohosStatsIntervals[m_ohosStatsFrames % m_ohosStatsIntervals.size()]
         = uint32_t(intervalUs);
